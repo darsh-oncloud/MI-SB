@@ -17,7 +17,7 @@ function process(email) {
     nlapiLogExecution("DEBUG", "subject", subject);
 
     // only process test email for now
-    if (sender != "dhruvsoni1706@gmail.com") return;
+    // if (sender != "dhruvsoni1706@gmail.com") return;
 
     var parts = subject.split('_');
     var action = parts[0];               // "Approve"
