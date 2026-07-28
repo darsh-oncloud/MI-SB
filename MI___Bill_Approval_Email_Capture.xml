@@ -7,7 +7,7 @@
   <initonvieworupdate>T</initonvieworupdate>
   <initsavedsearchcondition></initsavedsearchcondition>
   <inittriggertype></inittriggertype>
-  <isinactive>T</isinactive>
+  <isinactive>F</isinactive>
   <islogenabled>T</islogenabled>
   <keephistory>ONLYWHENTESTING</keephistory>
   <name>MI | Bill Approval Email Capture</name>
@@ -50,12 +50,13 @@
           <includerecordlink>F</includerecordlink>
           <includetransaction>T</includetransaction>
           <isinactive>F</isinactive>
+          <recipient>[ACCOUNT_SPECIFIC_VALUE]</recipient>
           <recipientbccemail></recipientbccemail>
           <recipientccemail></recipientccemail>
-          <recipientemail>dhruvsoni1706@gmail.com</recipientemail>
+          <recipientemail></recipientemail>
           <recipientfield></recipientfield>
           <recipientjoinfield></recipientjoinfield>
-          <recipienttype>ADDRESS</recipienttype>
+          <recipienttype>SPECIFIC</recipienttype>
           <scheduledelay></scheduledelay>
           <schedulemode>DELAY</schedulemode>
           <schedulerecurrence></schedulerecurrence>
