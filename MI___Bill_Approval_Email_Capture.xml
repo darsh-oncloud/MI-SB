@@ -34,7 +34,7 @@
       <description></description>
       <donotexitworkflow>F</donotexitworkflow>
       <name>State 1</name>
-      <positionx>533</positionx>
+      <positionx>743</positionx>
       <positiony>123</positiony>
       <workflowactions triggertype="AFTERSUBMIT">
         <sendemailaction scriptid="workflowaction1893">
@@ -124,6 +124,13 @@
           </initcondition>
         </sendemailaction>
       </workflowactions>
+    </workflowstate>
+    <workflowstate scriptid="workflowstate285">
+      <description></description>
+      <donotexitworkflow>F</donotexitworkflow>
+      <name>State 2</name>
+      <positionx>743</positionx>
+      <positiony>223</positiony>
     </workflowstate>
   </workflowstates>
 </workflow>
