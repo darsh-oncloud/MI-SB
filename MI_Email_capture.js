@@ -24,6 +24,7 @@ function process(email) {
             ],
             [
                 new nlobjSearchColumn('internalid'),
+                new nlobjSearchColumn('fxamount'),
                 new nlobjSearchColumn('amount')
             ]
         );
@@ -34,7 +35,7 @@ function process(email) {
         }
 
         var billId = results[0].getId();
-        var amount = parseFloat(results[0].getValue('amount') || 0) || 0;
+        var amount = parseFloat(results[0].getValue('fxamount') || 0) || 0;
 
         var values = nlapiLookupField('vendorbill', billId, [
             VALIDATOR_FIELD,
@@ -46,19 +47,33 @@ function process(email) {
         var validatorId = String(values[VALIDATOR_FIELD] || '');
         var approverId = String(values[APPROVER_FIELD] || '');
         var validated = values[VALIDATED_FIELD] === 'T';
-        var oldNotes = values[NOTES_FIELD] || '';
+        // var oldNotes = values[NOTES_FIELD] || '';
 
-        var notes = oldNotes +
-            (oldNotes ? '\n\n--------------------\n\n' : '') +
-            action.toUpperCase() + '\n' + emailBody;
+        // var notes = oldNotes +
+        //     (oldNotes ? '\n\n--------------------\n\n' : '') +
+        //     action.toUpperCase() + '\n' + emailBody;
 
-        nlapiLogExecution('AUDIT', 'Bill',
-            billNumber + ' | Amount: ' + amount +
-            ' | Validator: ' + validatorId +
-            ' | Approver: ' + approverId +
-            ' | Validated: ' + validated
-        );
+        // nlapiLogExecution('AUDIT', 'Bill',
+        //     billNumber + ' | Amount: ' + amount +
+        //     ' | Validator: ' + validatorId +
+        //     ' | Approver: ' + approverId +
+        //     ' | Validated: ' + validated
+        // );
+var oldNotes = values[NOTES_FIELD] || '';
 
+var commentPos = emailBody.toUpperCase().indexOf('COMMENTS:');
+var comment = commentPos >= 0
+    ? emailBody.substring(commentPos + 9).trim()
+    : '';
+
+var notes = oldNotes;
+
+if (comment) {
+    notes = oldNotes +
+        (oldNotes ? '\n\n--------------------\n\n' : '') +
+        nlapiDateToString(new Date()) + '\n' +
+        comment;
+}
         // Reject
         if (action === 'reject') {
             nlapiSubmitField('vendorbill', billId,
