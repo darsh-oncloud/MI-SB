@@ -1,21 +1,21 @@
 /*eslint-disable*/
 
-var APPROVER_ID = '-5';
+var FINAL_APPROVER_ID = '-5'//'12138';
 
-var VALIDATOR_FIELD = 'custbody_vendbill_validator';
 var VALIDATED_FIELD = 'custbody_vendbill_validator_check';
-var APPROVER_FIELD  = 'custbody_bill_approver';
 var NOTES_FIELD     = 'custbody_mi_approval_notes';
 
 function process(email) {
     try {
+        // Subject: Approve_VENDBILL48768 / Reject_VENDBILL48768
         var match = String(email.getSubject() || '').trim().match(/^(Approve|Reject)_(.+)$/i);
         if (!match) return;
 
         var action = match[1].toLowerCase();
         var billNumber = match[2].trim();
-        var emailBody = email.getTextBody() || '';
+        var emailBody = String(email.getTextBody() || '');
 
+        // Find Vendor Bill + transaction currency amount
         var results = nlapiSearchRecord('vendorbill', null,
             [
                 ['type', 'anyof', 'VendBill'], 'AND',
@@ -24,8 +24,7 @@ function process(email) {
             ],
             [
                 new nlobjSearchColumn('internalid'),
-                new nlobjSearchColumn('fxamount'),
-                new nlobjSearchColumn('amount')
+                new nlobjSearchColumn('fxamount')
             ]
         );
 
@@ -35,85 +34,89 @@ function process(email) {
         }
 
         var billId = results[0].getId();
-        var amount = parseFloat(results[0].getValue('fxamount') || 0) || 0;
+        var amount = Math.abs(parseFloat(results[0].getValue('fxamount') || 0) || 0);
 
-        var values = nlapiLookupField('vendorbill', billId, [
-            VALIDATOR_FIELD,
-            VALIDATED_FIELD,
-            APPROVER_FIELD,
-            NOTES_FIELD
-        ]);
+        // Load bill so workflow sees a normal record save
+        var bill = nlapiLoadRecord('vendorbill', billId);
+        var validated = bill.getFieldValue(VALIDATED_FIELD) === 'T';
+        var oldNotes = bill.getFieldValue(NOTES_FIELD) || '';
 
-        var validatorId = String(values[VALIDATOR_FIELD] || '');
-        var approverId = String(values[APPROVER_FIELD] || '');
-        var validated = values[VALIDATED_FIELD] === 'T';
-        // var oldNotes = values[NOTES_FIELD] || '';
+        // Take only whatever is after COMMENTS:
+        var commentPos = emailBody.toUpperCase().indexOf('COMMENTS:');
+        var comment = commentPos >= 0 ? emailBody.substring(commentPos + 9).trim() : '';
 
-        // var notes = oldNotes +
-        //     (oldNotes ? '\n\n--------------------\n\n' : '') +
-        //     action.toUpperCase() + '\n' + emailBody;
+        // Append comment only when a comment exists
+        if (comment) {
+            bill.setFieldValue(
+                NOTES_FIELD,
+                oldNotes +
+                (oldNotes ? '\n\n--------------------\n\n' : '') +
+                nlapiDateToString(new Date()) + '\n' +
+                comment
+            );
+        }
 
-        // nlapiLogExecution('AUDIT', 'Bill',
-        //     billNumber + ' | Amount: ' + amount +
-        //     ' | Validator: ' + validatorId +
-        //     ' | Approver: ' + approverId +
-        //     ' | Validated: ' + validated
-        // );
-var oldNotes = values[NOTES_FIELD] || '';
+        nlapiLogExecution('AUDIT', 'Bill',
+            billNumber + ' | Amount: ' + amount +
+            ' | Validated: ' + validated +
+            ' | Action: ' + action
+        );
 
-var commentPos = emailBody.toUpperCase().indexOf('COMMENTS:');
-var comment = commentPos >= 0
-    ? emailBody.substring(commentPos + 9).trim()
-    : '';
-
-var notes = oldNotes;
-
-if (comment) {
-    notes = oldNotes +
-        (oldNotes ? '\n\n--------------------\n\n' : '') +
-        nlapiDateToString(new Date()) + '\n' +
-        comment;
-}
-        // Reject
+        // Reject - sender does not matter
         if (action === 'reject') {
-            nlapiSubmitField('vendorbill', billId,
-                ['approvalstatus', NOTES_FIELD],
-                ['3', notes]
-            );
+            bill.setFieldValue('approvalstatus', '3');
+            nlapiSubmitRecord(bill, true, false);
             return;
         }
 
-        // Teresa is Validator -> approve directly
-        if (validatorId === APPROVER_ID) {
-            nlapiSubmitField('vendorbill', billId,
-                ['approvalstatus', VALIDATED_FIELD, NOTES_FIELD],
-                ['2', 'T', notes]
-            );
+        // Get sender email
+        var from = email.getFrom();
+        var senderEmail = from ? String(from.getEmail() || '').trim().toLowerCase() : '';
+
+        if (!senderEmail) {
+            nlapiLogExecution('ERROR', 'Sender Email Missing', billNumber);
             return;
         }
 
-        // First Validator approval
-        if (!validated) {
-            var fields = [VALIDATED_FIELD, NOTES_FIELD];
-            var vals = ['T', notes];
+        // Find employee from sender email
+        var employees = nlapiSearchRecord('employee', null,
+            [
+                ['email', 'is', senderEmail], 'AND',
+                ['isinactive', 'is', 'F']
+            ],
+            [new nlobjSearchColumn('internalid')]
+        );
 
-            // <= $1,000 -> approve immediately
-            if (amount <= 1000) {
-                fields.push('approvalstatus');
-                vals.push('2');
-            }
-
-            nlapiSubmitField('vendorbill', billId, fields, vals);
+        if (!employees || !employees.length) {
+            nlapiLogExecution('ERROR', 'Employee Not Found', senderEmail);
             return;
         }
 
-        // Second approval from Teresa
-        if (approverId === APPROVER_ID) {
-            nlapiSubmitField('vendorbill', billId,
-                ['approvalstatus', NOTES_FIELD],
-                ['2', notes]
-            );
+        var senderId = String(employees[0].getId());
+
+        nlapiLogExecution('AUDIT', 'Email Sender',
+            'Email: ' + senderEmail + ' | Employee ID: ' + senderId
+        );
+
+        // Employee -5 = final approver
+        // Make sure Validated = T and approve regardless of amount
+        if (senderId === FINAL_APPROVER_ID) {
+            bill.setFieldValue(VALIDATED_FIELD, 'T');
+            bill.setFieldValue('approvalstatus', '2');
+            nlapiSubmitRecord(bill, true, false);
+            return;
         }
+
+        // Any other employee = first approval
+        bill.setFieldValue(VALIDATED_FIELD, 'T');
+
+        // <= $1,00 = approve
+        if (amount <= 100) {
+            bill.setFieldValue('approvalstatus', '2');
+        }
+
+        // > $1,000 = Validated only; remains Pending Approval
+        nlapiSubmitRecord(bill, true, false);
 
     } catch (e) {
         nlapiLogExecution('ERROR', 'Email Capture Error', e.toString());
